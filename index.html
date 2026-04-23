@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IsiZulu Farm Food Word Search</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #1f5e2e;
+      margin-bottom: 10px;
+    }
+
+    p {
+      max-width: 900px;
+      margin: 10px auto;
+    }
+
+    .instructions {
+      background: #fff8dc;
+      border: 1px solid #e0c97f;
+      padding: 12px;
+      border-radius: 10px;
+      max-width: 900px;
+      margin: 0 auto 20px;
+    }
+
+    .layout {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(15, 36px);
+      gap: 4px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .cell {
+      width: 36px;
+      height: 36px;
+      line-height: 36px;
+      border: 1px solid #999;
+      background: white;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 6px;
+    }
+
+    .cell.selected {
+      background: #ffe082;
+    }
+
+    .cell.found {
+      background: #81c784;
+      color: white;
+      border-color: #2e7d32;
+    }
+
+    .word-list {
+      text-align: left;
+      max-width: 280px;
+      margin: 0 auto;
+      padding-left: 20px;
+    }
+
+    .word-list li {
+      margin: 8px 0;
+      font-size: 16px;
+    }
+
+    .word-list li.done {
+      text-decoration: line-through;
+      color: #2e7d32;
+      font-weight: bold;
+    }
+
+    .buttons {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background: #1565c0;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0d47a1;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    @media (max-width: 700px) {
+      .grid {
+        grid-template-columns: repeat(15, 28px);
+      }
+
+      .cell {
+        width: 28px;
+        height: 28px;
+        line-height: 28px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Ukudla kwasepulazini</h1>
+
+  <div class="instructions">
+    <strong>Instructions:</strong> Click the letters of one word in order.
+    You can select words left to right, top to bottom, or diagonally.
+    After selecting a word, click <strong>Check Word</strong>.
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Word Search Grid</h2>
+      <div id="grid" class="grid"></div>
+
+      <div class="buttons">
+        <button onclick="checkSelection()">Check Word</button>
+        <button onclick="clearSelection()">Clear Selection</button>
+        <button onclick="newPuzzle()">New Puzzle</button>
+      </div>
+
+      <div class="status" id="status">Find all 13 words.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Words to Find</h2>
+      <ul class="word-list" id="wordList"></ul>
+    </div>
+  </div>
+
+  <script>
+    const size = 15;
+
+    const rawWords = [
+      { display: "UBISI", grid: "UBISI" },
+      { display: "INYAMA", grid: "INYAMA" },
+      { display: "UTAMATISI", grid: "UTAMATISI" },
+      { display: "UBHANANA", grid: "UBHANANA" },
+      { display: "UBHONTSHISI", grid: "UBHONTSHISI" },
+      { display: "ISIPINASHI", grid: "ISIPINASHI" },
+      { display: "ITHANGA", grid: "ITHANGA" },
+      { display: "UKHEROTHI", grid: "UKHEROTHI" },
+      { display: "I-APHULA", grid: "IAPHULA" },
+      { display: "IPHEYA", grid: "IPHEYA" },
+      { display: "IWOLINTSHI", grid: "IWOLINTSHI" },
+      { display: "AMAGILEBHISI", grid: "AMAGILEBHISI" },
+      { display: "IKLABISHI", grid: "IKLABISHI" }
+    ];
+
+    const directions = [
+      { dr: 0, dc: 1 },   // right
+      { dr: 1, dc: 0 },   // down
+      { dr: 1, dc: 1 },   // down-right
+      { dr: -1, dc: 1 }   // up-right
+    ];
+
+    let grid = [];
+    let placements = [];
+    let selectedCells = [];
+    let foundWords = new Set();
+
+    function emptyGrid() {
+      return Array.from({ length: size }, () => Array(size).fill(""));
+    }
+
+    function randomLetter() {
+      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      return letters[Math.floor(Math.random() * letters.length)];
+    }
+
+    function canPlace(word, row, col, dr, dc) {
+      for (let i = 0; i < word.length; i++) {
+        const r = row + i * dr;
+        const c = col + i * dc;
+
+        if (r < 0 || r >= size || c < 0 || c >= size) return false;
+        if (grid[r][c] !== "" && grid[r][c] !== word[i]) return false;
+      }
+      return true;
+    }
+
+    function placeWord(wordObj) {
+      const word = wordObj.grid;
+
+      for (let attempt = 0; attempt < 300; attempt++) {
+        const dir = directions[Math.floor(Math.random() * directions.length)];
+        const row = Math.floor(Math.random() * size);
+        const col = Math.floor(Math.random() * size);
+
+        if (canPlace(word, row, col, dir.dr, dir.dc)) {
+          const coords = [];
+
+          for (let i = 0; i < word.length; i++) {
+            const r = row + i * dir.dr;
+            const c = col + i * dir.dc;
+            grid[r][c] = word[i];
+            coords.push(`${r}-${c}`);
+          }
+
+          placements.push({
+            display: wordObj.display,
+            grid: wordObj.grid,
+            coords: coords
+          });
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function fillEmptySpaces() {
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          if (grid[r][c] === "") {
+            grid[r][c] = randomLetter();
+          }
+        }
+      }
+    }
+
+    function renderGrid() {
+      const gridEl = document.getElementById("grid");
+      gridEl.innerHTML = "";
+
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.textContent = grid[r][c];
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          cell.dataset.key = `${r}-${c}`;
+          cell.addEventListener("click", () => toggleCell(cell));
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function renderWordList() {
+      const listEl = document.getElementById("wordList");
+      listEl.innerHTML = "";
+
+      placements.forEach(word => {
+        const li = document.createElement("li");
+        li.textContent = word.display;
+        li.id = `word-${word.display}`;
+        if (foundWords.has(word.display)) {
+          li.classList.add("done");
+        }
+        listEl.appendChild(li);
+      });
+    }
+
+    function toggleCell(cell) {
+      const key = cell.dataset.key;
+
+      if (cell.classList.contains("found")) return;
+
+      if (cell.classList.contains("selected")) {
+        cell.classList.remove("selected");
+        selectedCells = selectedCells.filter(item => item.key !== key);
+      } else {
+        cell.classList.add("selected");
+        selectedCells.push({
+          key,
+          row: Number(cell.dataset.row),
+          col: Number(cell.dataset.col)
+        });
+      }
+    }
+
+    function clearSelection() {
+      document.querySelectorAll(".cell.selected").forEach(cell => {
+        cell.classList.remove("selected");
+      });
+      selectedCells = [];
+      setStatus("Selection cleared.");
+    }
+
+    function sameCoords(a, b) {
+      if (a.length !== b.length) return false;
+      const aSorted = [...a].sort();
+      const bSorted = [...b].sort();
+      return aSorted.every((v, i) => v === bSorted[i]);
+    }
+
+    function checkSelection() {
+      const selectedKeys = selectedCells.map(c => c.key);
+
+      if (selectedKeys.length === 0) {
+        setStatus("Please select a word first.");
+        return;
+      }
+
+      let matchedWord = null;
+
+      for (const word of placements) {
+        if (!foundWords.has(word.display) && sameCoords(selectedKeys, word.coords)) {
+          matchedWord = word;
+          break;
+        }
+      }
+
+      if (matchedWord) {
+        foundWords.add(matchedWord.display);
+
+        matchedWord.coords.forEach(key => {
+          const cell = document.querySelector(`.cell[data-key="${key}"]`);
+          if (cell) {
+            cell.classList.remove("selected");
+            cell.classList.add("found");
+          }
+        });
+
+        selectedCells = [];
+        renderWordList();
+
+        if (foundWords.size === placements.length) {
+          setStatus("Excellent! You found all 13 words.");
+        } else {
+          setStatus(`Correct! You found: ${matchedWord.display}`);
+        }
+      } else {
+        setStatus("That selection is not one of the hidden words. Try again.");
+      }
+    }
+
+    function setStatus(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    function buildPuzzle() {
+      grid = emptyGrid();
+      placements = [];
+      foundWords = new Set();
+      selectedCells = [];
+
+      const words = [...rawWords].sort((a, b) => b.grid.length - a.grid.length);
+
+      for (const word of words) {
+        const ok = placeWord(word);
+        if (!ok) {
+          setStatus("Puzzle could not place all words. Generating again...");
+          return buildPuzzle();
+        }
+      }
+
+      fillEmptySpaces();
+      renderGrid();
+      renderWordList();
+      setStatus("Find all 13 words.");
+    }
+
+    function newPuzzle() {
+      buildPuzzle();
+    }
+
+    buildPuzzle();
+  </script>
+</body>
+</html>
